@@ -33,25 +33,37 @@ def ask_openai():
     data = request.json
     thread_id = data.get('thread_id')
     user_input = data.get('input')
-    user_files = data.get('file_ids')
+    user_files = data.get('file_ids', [])  # Default to an empty list if not provided
+    
     # Ensure user input is provided
     if not user_input and not user_files:
         return jsonify("No input provided"), 400
     if thread_id == 'None':
         return jsonify("No thread provided"), 400
+    
     try:
         # Create message on thread
         thread_message = openai.beta.threads.messages.create(
-        thread_id,
-        role="user",
-        content=user_input,
-        file_ids=user_files
+            thread_id=thread_id,
+            role="user",
+            content=user_input
         )
+        
+        # If there are files, add them in a separate step
+        if user_files:
+            for file_id in user_files:
+                openai.beta.threads.messages.files.create(
+                    thread_id=thread_id,
+                    message_id=thread_message.id,
+                    file_id=file_id
+                )
+        
         # Run assistant on thread
         run = openai.beta.threads.runs.create(
-        thread_id=thread_id,
-        assistant_id=os.environ.get('OPENAI_ASSISTANT_ID')
+            thread_id=thread_id,
+            assistant_id=os.environ.get('OPENAI_ASSISTANT_ID')
         )
+        
         while run.status != 'completed': # TODO add check for failure and other statuses
             # Check run status
             print('Run Status: ' + run.status)
@@ -232,4 +244,5 @@ def write_file(path, contents):
 
 # Run the Flask app
 if __name__ == '__main__':
-    app.run(debug=True)
+    # This is used when running locally only. When deploying use a WSGI server.
+    app.run(host='0.0.0.0', port=8080, debug=False)
